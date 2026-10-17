@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seedance AI Studio</title>
+<style>
+:root{--bg:#050507;--card:#0e0e14;--line:#23233a;--p:#8b5cf6;--g:#39ff88;--t:#ececf4;--m:#8e8ea8}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:16px/1.5 system-ui,sans-serif}
+header{padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0}h1 span{color:var(--g)}
+main{max-width:720px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;animation:in .4s ease}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+h2{font-size:15px;margin:0 0 12px;color:var(--m);text-transform:uppercase;letter-spacing:.08em}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid}
+.free{color:var(--g);border-color:var(--g)}.paid{color:var(--p);border-color:var(--p)}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:28px;text-align:center;cursor:pointer;color:var(--m)}
+.drop:hover{border-color:var(--p)}img#pv{width:100%;max-height:340px;object-fit:contain;border-radius:12px;display:none}
+button{background:var(--p);color:#fff;border:0;border-radius:10px;padding:12px 16px;font-size:15px;cursor:pointer;transition:.2s}
+button.alt{background:transparent;border:1px solid var(--line);color:var(--t)}button.go{background:var(--g);color:#000;font-weight:600}
+button:disabled{opacity:.4;cursor:not-allowed}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+input,textarea{width:100%;background:#000;border:1px solid var(--line);border-radius:10px;color:var(--t);padding:10px;font:inherit;margin-bottom:8px}
+.styles button{padding:8px 12px;font-size:13px}.styles button.on{background:var(--g);color:#000}
+#msg{color:#ff6b81;min-height:20px;font-size:14px}textarea#out{min-height:240px}
+</style></head><body>
+<header><h1>Seedance <span>AI Studio</span></h1><span class="badge free">Free mode</span></header>
+<main>
+<section class="card"><h2>1 · Image <span class="badge free">free</span></h2>
+<div class="drop" id="drop">Tap to upload JPG, PNG or WEBP (max 5 MB)</div>
+<input type="file" id="file" accept="image/jpeg,image/png,image/webp" hidden>
+<img id="pv" alt="Preview">
+<div class="row" id="imgBtns" hidden><button class="alt" id="replace">Replace</button><button class="alt" id="remove">Remove</button><button id="analyze">Analyze image</button></div>
+<p id="msg"></p></section>
+
+<section class="card"><h2>2 · Details <span class="badge free">free</span></h2>
+<p id="hint" style="color:var(--m);font-size:14px;margin-top:0"></p>
+<input id="subject" placeholder="Main subject"><input id="setting" placeholder="Setting">
+<input id="lighting" placeholder="Lighting"><input id="composition" placeholder="Composition"><input id="vstyle" placeholder="Visual style"></section>
+
+<section class="card"><h2>3 · Prompt <span class="badge free">free</span></h2>
+<div class="row styles" id="styles"></div>
+<div class="row"><button class="go" id="gen">Generate Prompt</button><button class="alt" id="regen" disabled>Regenerate</button><button class="alt" id="copy" disabled>Copy Prompt</button></div>
+<textarea id="out" style="margin-top:12px" placeholder="Your prompt appears here (editable)"></textarea></section>
+
+<section class="card"><h2>4 · Video <span class="badge paid">paid API</span></h2>
+<p id="vstat" style="color:var(--m);margin:0"></p>
+<div class="row"><button id="vgo" disabled>Generate video</button></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);let file=null,seed=0,style='cinematic',cfg={};
+const msg=t=>$('msg').textContent=t||'';
+['cinematic','realistic','anime','music video','advertisement','social media'].forEach(s=>{
+ const b=document.createElement('button');b.textContent=s;b.className='alt'+(s===style?' on':'');
+ b.onclick=()=>{style=s;[...$('styles').children].forEach(c=>c.classList.toggle('on',c===b))};$('styles').append(b)});
+fetch('/api/config').then(r=>r.json()).then(c=>{cfg=c;
+ $('hint').textContent=c.vision?'Analyze your image, then edit the details if needed.':'AI analysis is not configured on this server. Describe your image below; prompts still work.';
+ $('analyze').hidden=!c.vision;
+ $('vstat').textContent=c.video?'Video provider configured.':'Video generation is not configured on this server. It requires a paid provider API key. Prompts above are fully usable without it.';
+ $('vgo').disabled=true});
+$('drop').onclick=$('replace').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
+ if(!['image/jpeg','image/png','image/webp'].includes(f.type))return msg('Only JPG, PNG or WEBP allowed.');
+ if(f.size>5*1024*1024)return msg('Image must be 5 MB or smaller.');
+ file=f;msg();$('pv').src=URL.createObjectURL(f);$('pv').style.display='block';$('drop').hidden=true;$('imgBtns').hidden=false};
+$('remove').onclick=()=>{file=null;$('file').value='';$('pv').style.display='none';$('drop').hidden=false;$('imgBtns').hidden=true};
+$('analyze').onclick=async()=>{if(!file)return;$('analyze').disabled=true;$('analyze').textContent='Analyzing…';
+ try{const fd=new FormData();fd.append('image',file);const r=await fetch('/api/analyze',{method:'POST',body:fd});const d=await r.json();
+  if(!r.ok)throw new Error(d.error);
+  $('subject').value=d.subject;$('setting').value=d.setting;$('lighting').value=d.lighting;$('composition').value=d.composition;$('vstyle').value=d.style;msg()}
+ catch(e){msg(e.message)}$('analyze').disabled=false;$('analyze').textContent='Analyze image'};
+async function gen(){msg();const analysis={subject:$('subject').value,setting:$('setting').value,lighting:$('lighting').value,composition:$('composition').value,style:$('vstyle').value};
+ try{const r=await fetch('/api/prompt',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({analysis,style,seed})});const d=await r.json();
+  if(!r.ok)throw new Error(d.error);$('out').value=d.prompt;$('regen').disabled=$('copy').disabled=false}catch(e){msg(e.message)}}
+$('gen').onclick=()=>{seed=0;gen()};$('regen').onclick=()=>{seed++;gen()};
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('out').value);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy Prompt',1200)}catch{$('out').select()}};
+</script></body></html>
